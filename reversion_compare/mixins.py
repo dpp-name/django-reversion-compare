@@ -73,6 +73,17 @@ class CompareMixin(object, ):
         html = self.fallback_compare(obj_compare)
         return html
 
+    def get_all_field_names_polyfill(self, obj):
+        # obj._meta.get_all_field_names had been deprecated in Django v1.10
+        # https://docs.djangoproject.com/en/1.10/ref/models/meta/
+        from itertools import chain
+        return list(set(chain.from_iterable(
+            (field.name, field.attname) if hasattr(field, 'attname') else (field.name,)
+            for field in obj._meta.get_fields()
+            # For complete backwards compatibility, you may want to exclude
+            # GenericForeignKey from the results.
+            if not (field.many_to_one and field.related_model is None)
+        )))
     def compare(self, obj, version1, version2):
         """
         Create a generic html diff from the obj between version1 and version2:
@@ -92,9 +103,9 @@ class CompareMixin(object, ):
         # This gathers the related reverse ForeignKey fields, so we can do ManyToOne compares
         self.reverse_fields = []
         # From: http://stackoverflow.com/questions/19512187/django-list-all-reverse-relations-of-a-model
-        for field_name in obj._meta.get_all_field_names():
+        for field_name in self.get_all_field_names_polyfill(obj):
             f = getattr(
-                obj._meta.get_field_by_name(field_name)[0],
+                obj._meta.get_field(field_name),
                 'field',
                 None
             )
